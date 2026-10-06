@@ -1,0 +1,11 @@
+command: go test ./internal/pool -bench=Benchmark -benchmem -benchtime=100ms -count=1 -run ^$
+goos: windows
+goarch: amd64
+cpu: AMD Ryzen 7 9800X3D 8-Core Processor
+
+pool-freelist  BenchmarkFreeListGetPut-16  78988940  1.602 ns/op  0 B/op  0 allocs/op
+pool-sync      BenchmarkSyncPoolGetPut-16   15821949  7.237 ns/op  0 B/op  0 allocs/op
+
+The timed sync.Pool loop Puts the value back, so the steady state reports 0 allocs/op.
+TestSyncPoolAllocatesFromNew covers an empty pool: Get calls New and allocates.
+The default OrderBook path is the array free list. sync.Pool is not linked into the matcher.
