@@ -15,6 +15,7 @@ import (
 func main() {
 	path := flag.String("file", "", "JSONL capture of snapshot and diff lines")
 	depth := flag.Int("depth", 5, "price levels to print on each side")
+	script := flag.Bool("script", false, "print synthetic limits and cancels")
 	flag.Parse()
 	if *path == "" {
 		fmt.Fprintln(os.Stderr, "missing -file")
@@ -28,6 +29,8 @@ func main() {
 	defer f.Close()
 
 	var book replay.Book
+	synth := replay.NewSynth()
+	var actions []replay.Action
 	sc := bufio.NewScanner(f)
 	lineNo := 0
 	for sc.Scan() {
@@ -45,6 +48,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "line %d: %v\n", lineNo, err)
 			os.Exit(1)
 		}
+		if *script {
+			actions = append(actions, synth.Push(book.Bids, book.Asks, int64(book.LastUpdate))...)
+		}
 	}
 	if err := sc.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -55,6 +61,20 @@ func main() {
 	printSide(book.BidsDesc(), *depth)
 	fmt.Println("asks")
 	printSide(book.AsksAsc(), *depth)
+	if *script {
+		fmt.Println("script")
+		for _, a := range actions {
+			if a.Kind == replay.ActionCancel {
+				fmt.Printf("CANCEL %d %d\n", a.CancelID, a.Time)
+				continue
+			}
+			side := "B"
+			if a.Side == replay.SideSell {
+				side = "S"
+			}
+			fmt.Printf("LIMIT %s %d %d %d %d\n", side, a.ID, a.Price, a.Qty, a.Time)
+		}
+	}
 }
 
 func printSide(levels []replay.Level, n int) {
