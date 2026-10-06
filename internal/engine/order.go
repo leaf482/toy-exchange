@@ -6,8 +6,8 @@ import "github.com/leaf482/toy-exchange/internal/pool"
 // A resting order occupies one pool slot and one level.
 type Order struct {
 	ID        uint64
-	Side      uint8
-	Type      uint8
+	Side      Side
+	Type      OrderType
 	Price     int64
 	Qty       int64
 	Leaves    int64
@@ -18,16 +18,20 @@ type Order struct {
 	Slot      uint32
 }
 
-// Side values.
+// Side is the order side.
+type Side uint8
+
 const (
-	SideBuy  uint8 = 1
-	SideSell uint8 = 2
+	SideBuy  Side = 1
+	SideSell Side = 2
 )
 
-// Order type values.
+// OrderType is a limit or a market order.
+type OrderType uint8
+
 const (
-	TypeLimit  uint8 = 1
-	TypeMarket uint8 = 2
+	TypeLimit  OrderType = 1
+	TypeMarket OrderType = 2
 )
 
 // LimitLevel is one price. Orders are a doubly linked FIFO queue.
@@ -91,6 +95,14 @@ func (p *OrderPool) Cap() int {
 		return 0
 	}
 	return p.free.Cap()
+}
+
+// At returns the slab pointer for a slot.
+func (p *OrderPool) At(slot uint32) *Order {
+	if p == nil {
+		return nil
+	}
+	return p.free.At(slot)
 }
 
 // InUse is the number of orders currently taken from the pool.
