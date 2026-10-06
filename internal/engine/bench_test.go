@@ -144,6 +144,32 @@ func (h *hist) P99() int64 {
 	return 1 << 21
 }
 
+func TestHotPathNoAlloc(t *testing.T) {
+	b := newBook(t, 128, 32, 128)
+	dst := make([]events.Event, 0, events.MaxEventsFor(128))
+	if _, err := b.Submit(OrderInput{ID: 1, Side: SideBuy, Type: TypeLimit, Price: 10, Qty: 1, Timestamp: 1}, dst[:0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Cancel(1, dst[:0]); err != nil {
+		t.Fatal(err)
+	}
+	var id uint64 = 2
+	allocs := testing.AllocsPerRun(100, func() {
+		dst = dst[:0]
+		if _, err := b.Submit(OrderInput{ID: id, Side: SideBuy, Type: TypeLimit, Price: 10, Qty: 1, Timestamp: int64(id)}, dst); err != nil {
+			t.Fatalf("submit %v", err)
+		}
+		dst = dst[:0]
+		if _, err := b.Cancel(id, dst); err != nil {
+			t.Fatalf("cancel %v", err)
+		}
+		id++
+	})
+	if allocs != 0 {
+		t.Fatalf("allocs/op = %v", allocs)
+	}
+}
+
 func BenchmarkMillion(b *testing.B) {
 	const n = 1_000_000
 	script := BuildScript(n, 1)

@@ -46,7 +46,7 @@ type OrderBook struct {
 	Asks         PriceTree
 	bestBid      *LimitLevel
 	bestAsk      *LimitLevel
-	orders       *index.Map
+	orders       *index.Open
 	orderPool    *OrderPool
 	levelPool    *LevelPool
 	NextTradeID  uint64
@@ -54,12 +54,12 @@ type OrderBook struct {
 }
 
 // New builds a book with fixed pool capacities.
-// indexCap sizes the baseline id map.
+// indexCap is the number of live ids the open-addressing table must hold.
 func New(orderCap, levelCap, indexCap int) (*OrderBook, error) {
 	if orderCap <= 0 || levelCap <= 0 || indexCap <= 0 {
 		return nil, ErrCapacity
 	}
-	orders := index.NewMap(indexCap)
+	orders := index.NewOpen(indexCap)
 	op := NewOrderPool(orderCap)
 	lp := NewLevelPool(levelCap)
 	if orders == nil || op == nil || lp == nil {
