@@ -28,7 +28,7 @@ func main() {
 	}
 	defer f.Close()
 
-	var book replay.Book
+	var session replay.Session
 	synth := replay.NewSynth()
 	var actions []replay.Action
 	sc := bufio.NewScanner(f)
@@ -44,23 +44,25 @@ func main() {
 			fmt.Fprintf(os.Stderr, "line %d: %v\n", lineNo, err)
 			os.Exit(1)
 		}
-		if err := book.Apply(msg); err != nil {
+		err = session.Feed(msg, func() {
+			if *script {
+				actions = append(actions, synth.Push(session.Book.Bids, session.Book.Asks, int64(session.Book.LastUpdate))...)
+			}
+		})
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "line %d: %v\n", lineNo, err)
 			os.Exit(1)
-		}
-		if *script {
-			actions = append(actions, synth.Push(book.Bids, book.Asks, int64(book.LastUpdate))...)
 		}
 	}
 	if err := sc.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("lastUpdate %d\n", book.LastUpdate)
+	fmt.Printf("lastUpdate %d\n", session.Book.LastUpdate)
 	fmt.Println("bids")
-	printSide(book.BidsDesc(), *depth)
+	printSide(session.Book.BidsDesc(), *depth)
 	fmt.Println("asks")
-	printSide(book.AsksAsc(), *depth)
+	printSide(session.Book.AsksAsc(), *depth)
 	if *script {
 		fmt.Println("script")
 		for _, a := range actions {
