@@ -1,0 +1,12 @@
+command: go test ./internal/engine -bench=BenchmarkMillion -benchmem -benchtime=1x -count=1 -run ^$
+goos: windows
+goarch: amd64
+cpu: AMD Ryzen 7 9800X3D 8-Core Processor
+BenchmarkMillion-16    1    140829000 ns/op    0 B/op    0 allocs/op
+
+ns/op is one full pass of 1_000_000 ops, with book construction outside the timer.
+orders/sec = 1000000000000 / 140829000 = 7100781
+
+index: open addressing, fixed table, load capped at 0.7
+TestHotPathNoAlloc: allocs/op = 0 for a submit plus cancel pair
+baseline map result remains in bench_baseline.txt
