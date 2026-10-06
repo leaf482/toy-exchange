@@ -44,34 +44,49 @@ func TestCaptureScriptMatchesEngineBook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dst := make([]events.Event, 0, 64)
-	for _, a := range actions {
-		var err error
-		if a.Kind == replay.ActionCancel {
-			dst, err = ob.Cancel(a.CancelID, dst[:0])
-		} else {
-			side := engine.SideBuy
-			if a.Side == replay.SideSell {
-				side = engine.SideSell
-			}
-			dst, err = ob.Submit(engine.OrderInput{
-				ID:        a.ID,
-				Side:      side,
-				Type:      engine.TypeLimit,
-				Price:     a.Price,
-				Qty:       a.Qty,
-				Timestamp: a.Time,
-			}, dst[:0])
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	applyOps(t, ob, replay.EngineOps(actions))
 	if err := ob.CheckInvariants(); err != nil {
 		t.Fatal(err)
 	}
 	assertDepth(t, ob, engine.SideBuy, book.BidsDesc())
 	assertDepth(t, ob, engine.SideSell, book.AsksAsc())
+}
+
+func TestStreamScriptMatchesEngineBook(t *testing.T) {
+	data, err := os.ReadFile("testdata/stream.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var session replay.Session
+	synth := replay.NewSynth()
+	var actions []replay.Action
+	if err := session.Replay(data, func() {
+		actions = append(actions, synth.Push(session.Book.Bids, session.Book.Asks, int64(session.Book.LastUpdate))...)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ob, err := engine.New(32, 32, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applyOps(t, ob, replay.EngineOps(actions))
+	if err := ob.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+	assertDepth(t, ob, engine.SideBuy, session.Book.BidsDesc())
+	assertDepth(t, ob, engine.SideSell, session.Book.AsksAsc())
+}
+
+func applyOps(t *testing.T, ob *engine.OrderBook, ops []engine.Op) {
+	t.Helper()
+	dst := make([]events.Event, 0, 64)
+	for _, op := range ops {
+		var err error
+		dst, err = ob.Apply(op, dst[:0])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func assertDepth(t *testing.T, ob *engine.OrderBook, side engine.Side, want []replay.Level) {
