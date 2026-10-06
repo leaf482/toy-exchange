@@ -226,3 +226,98 @@ func TestPoolExhaustLeavesFills(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestIndexRefusalCancelsRemainder(t *testing.T) {
+	b := newBook(t, 8, 8, 2)
+	dst := evbuf(0)
+	var err error
+	for _, in := range []OrderInput{
+		{ID: 1, Side: SideBuy, Type: TypeLimit, Price: 100, Qty: 5, Timestamp: 1},
+		{ID: 2, Side: SideBuy, Type: TypeLimit, Price: 90, Qty: 4, Timestamp: 2},
+	} {
+		dst, err = b.Submit(in, dst[:0])
+		mustOK(t, err)
+	}
+	dst, err = b.Submit(OrderInput{ID: 3, Side: SideSell, Type: TypeLimit, Price: 110, Qty: 3, Timestamp: 3}, dst[:0])
+	mustOK(t, err)
+	if formatEvents(dst) != "ACCEPTED 3 3 3\nCANCELED 3 3 5 3\n" {
+		t.Fatalf("index full\n%s", formatEvents(dst))
+	}
+	if price, qty, ok := b.BestBid(); !ok || price != 100 || qty != 5 {
+		t.Fatalf("bid %d %d %v", price, qty, ok)
+	}
+	if _, _, ok := b.BestAsk(); ok {
+		t.Fatal("ask rested")
+	}
+	if b.RestingCount != 2 {
+		t.Fatalf("resting %d", b.RestingCount)
+	}
+	if err := b.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLevelPoolExhaustCancelsRemainder(t *testing.T) {
+	b := newBook(t, 8, 1, 8)
+	dst := evbuf(0)
+	var err error
+	dst, err = b.Submit(OrderInput{ID: 1, Side: SideBuy, Type: TypeLimit, Price: 100, Qty: 4, Timestamp: 1}, dst[:0])
+	mustOK(t, err)
+	dst, err = b.Submit(OrderInput{ID: 2, Side: SideSell, Type: TypeLimit, Price: 110, Qty: 2, Timestamp: 2}, dst[:0])
+	mustOK(t, err)
+	if formatEvents(dst) != "ACCEPTED 2 2 2\nCANCELED 2 2 5 2\n" {
+		t.Fatalf("level full\n%s", formatEvents(dst))
+	}
+	if price, qty, ok := b.BestBid(); !ok || price != 100 || qty != 4 {
+		t.Fatalf("bid %d %d %v", price, qty, ok)
+	}
+	if err := b.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAmendZeroCancels(t *testing.T) {
+	b := newBook(t, 8, 8, 8)
+	dst := evbuf(0)
+	var err error
+	dst, err = b.Submit(OrderInput{ID: 1, Side: SideBuy, Type: TypeLimit, Price: 50, Qty: 5, Timestamp: 1}, dst[:0])
+	mustOK(t, err)
+	dst, err = b.Amend(1, 50, 0, 2, dst[:0])
+	mustOK(t, err)
+	if formatEvents(dst) != "CANCELED 1 5 0 1\n" {
+		t.Fatalf("amend zero\n%s", formatEvents(dst))
+	}
+	if b.RestingCount != 0 {
+		t.Fatalf("resting %d", b.RestingCount)
+	}
+	if _, err := b.Cancel(1, dst[:0]); err != ErrNotFound {
+		t.Fatalf("cancel %v", err)
+	}
+}
+
+func TestAmendResubmitKeepsCancelWhenLevelIsFull(t *testing.T) {
+	b := newBook(t, 8, 1, 8)
+	dst := evbuf(0)
+	var err error
+	for _, in := range []OrderInput{
+		{ID: 1, Side: SideBuy, Type: TypeLimit, Price: 50, Qty: 5, Timestamp: 1},
+		{ID: 2, Side: SideBuy, Type: TypeLimit, Price: 50, Qty: 5, Timestamp: 2},
+	} {
+		dst, err = b.Submit(in, dst[:0])
+		mustOK(t, err)
+	}
+	dst, err = b.Amend(1, 40, 5, 3, dst[:0])
+	mustOK(t, err)
+	if formatEvents(dst) != "CANCELED 1 5 0 1\nACCEPTED 1 5 3\nCANCELED 1 5 5 3\n" {
+		t.Fatalf("resubmit\n%s", formatEvents(dst))
+	}
+	if got := idsAt(b, SideBuy, 50); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("queue %v", got)
+	}
+	if got := idsAt(b, SideBuy, 40); len(got) != 0 {
+		t.Fatalf("new price %v", got)
+	}
+	if err := b.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}
