@@ -3,11 +3,9 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/leaf482/toy-exchange/internal/replay"
 )
@@ -21,40 +19,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "missing -file")
 		os.Exit(2)
 	}
-	f, err := os.Open(*path)
+	data, err := os.ReadFile(*path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer f.Close()
 
 	var session replay.Session
 	synth := replay.NewSynth()
 	var actions []replay.Action
-	sc := bufio.NewScanner(f)
-	lineNo := 0
-	for sc.Scan() {
-		lineNo++
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	err = session.Replay(data, func() {
+		if *script {
+			actions = append(actions, synth.Push(session.Book.Bids, session.Book.Asks, int64(session.Book.LastUpdate))...)
 		}
-		msg, err := replay.Decode([]byte(line))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "line %d: %v\n", lineNo, err)
-			os.Exit(1)
-		}
-		err = session.Feed(msg, func() {
-			if *script {
-				actions = append(actions, synth.Push(session.Book.Bids, session.Book.Asks, int64(session.Book.LastUpdate))...)
-			}
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "line %d: %v\n", lineNo, err)
-			os.Exit(1)
-		}
-	}
-	if err := sc.Err(); err != nil {
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
