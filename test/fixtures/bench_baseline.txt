@@ -1,0 +1,15 @@
+command: go test ./internal/engine -bench=BenchmarkMillion -benchmem -benchtime=1x -count=1 -run ^$
+goos: windows
+goarch: amd64
+cpu: AMD Ryzen 7 9800X3D 8-Core Processor
+BenchmarkMillion-16    1    165348100 ns/op    0 B/op    0 allocs/op
+
+ns/op is one full pass of 1_000_000 ops, with book construction outside the timer.
+orders/sec = 1000000000000 / 165348100 = 6048448
+
+index: baseline map, pre-hinted to 1_000_000
+P99 bucket upper edge: 1ns
+histogram buckets [999692 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 307 1 0 0]
+999692 samples fell below 2ns, which is under the process clock step.
+307 samples fell in the 2^18 bucket and 1 sample in the 2^19 bucket.
+The published P99 is that coarse bucket edge.
