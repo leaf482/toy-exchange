@@ -343,6 +343,42 @@ func minNode(n *LimitLevel) *LimitLevel {
 	return n
 }
 
+// Prev returns the next-lower price, or nil.
+func (t *PriceTree) Prev(n *LimitLevel) *LimitLevel {
+	if n == nil {
+		return nil
+	}
+	if n.Left != nil {
+		m := n.Left
+		for m.Right != nil {
+			m = m.Right
+		}
+		return m
+	}
+	p := n.Parent
+	for p != nil && n == p.Left {
+		n = p
+		p = p.Parent
+	}
+	return p
+}
+
+// Next returns the next-higher price, or nil.
+func (t *PriceTree) Next(n *LimitLevel) *LimitLevel {
+	if n == nil {
+		return nil
+	}
+	if n.Right != nil {
+		return minNode(n.Right)
+	}
+	p := n.Parent
+	for p != nil && n == p.Right {
+		n = p
+		p = p.Parent
+	}
+	return p
+}
+
 // Find returns the level at price, or nil.
 func (t *PriceTree) Find(price int64) *LimitLevel {
 	if t == nil {
